@@ -135,7 +135,7 @@ private class NativeVideoPlayerView(
             "duration" to max(duration, 0L),
             "position" to max(position, 0L),
             "isPlaying" to player.isPlaying,
-            "isReady" to (player.playbackState == Player.STATE_READY),
+            "isReady" to (player.playbackState != Player.STATE_IDLE),
             "aspectRatio" to aspectRatio.toDouble(),
         )
     }
