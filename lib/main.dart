@@ -858,6 +858,20 @@ class ExportException implements Exception {
   String toString() => message;
 }
 
+class EditorPalette {
+  static const Color shell = Color(0xff07090d);
+  static const Color videoChrome = Color(0xff0b0f14);
+  static const Color panel = Color(0xfff4f7f8);
+  static const Color panelRaised = Color(0xffffffff);
+  static const Color panelMuted = Color(0xffe7edf1);
+  static const Color line = Color(0xffd6e0e5);
+  static const Color text = Color(0xff172026);
+  static const Color mutedText = Color(0xff65737d);
+  static const Color teal = Color(0xff0f766e);
+  static const Color tealSoft = Color(0xffd8f3ee);
+  static const Color danger = Color(0xffb42318);
+}
+
 class NativeVideoController extends ChangeNotifier {
   NativeVideoController(this.path);
 
@@ -1334,7 +1348,7 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: EditorPalette.shell,
       body: SafeArea(
         child: _initializing
             ? const Center(child: CircularProgressIndicator())
@@ -1399,29 +1413,61 @@ class VideoPane extends StatelessWidget {
     return Stack(
       children: <Widget>[
         Positioned.fill(
-          child: NativeVideoPlayer(controller: controller),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(color: EditorPalette.videoChrome),
+            child: NativeVideoPlayer(controller: controller),
+          ),
+        ),
+        Positioned.fill(
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            opacity: controller.isReady ? 0 : 1,
+            child: IgnorePointer(
+              ignoring: controller.isReady,
+              child: VideoLoadingOverlay(title: title),
+            ),
+          ),
         ),
         Positioned(
-          left: 8,
-          right: 8,
-          top: 8,
+          left: 10,
+          right: 10,
+          top: 10,
           child: Row(
             children: <Widget>[
-              IconButton.filledTonal(
+              IconButton(
                 tooltip: '返回',
                 onPressed: onBack,
                 icon: const Icon(Icons.arrow_back),
+                color: Colors.white,
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xcc111820),
+                  fixedSize: const Size(44, 44),
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    shadows: <Shadow>[Shadow(blurRadius: 3)],
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xcc111820),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0x22ffffff)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1429,6 +1475,55 @@ class VideoPane extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class VideoLoadingOverlay extends StatelessWidget {
+  const VideoLoadingOverlay({required this.title, super.key});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: EditorPalette.videoChrome),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(
+                Icons.movie_filter_outlined,
+                color: Color(0xff9fb3bd),
+                size: 34,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const SizedBox(
+                width: 132,
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  backgroundColor: Color(0xff1d2831),
+                  color: EditorPalette.teal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1483,8 +1578,8 @@ class EditorControlsPane extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
-        color: Color(0xfff7f9fb),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+        color: EditorPalette.panel,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
       ),
       child: Column(
         children: <Widget>[
@@ -1501,18 +1596,33 @@ class EditorControlsPane extends StatelessWidget {
             onNudgeBack: onNudgeBack,
             onNudgeForward: onNudgeForward,
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
+            child: Row(
+              children: <Widget>[
+                const Text(
+                  '片段',
+                  style: TextStyle(
+                    color: EditorPalette.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SegmentCountPill(count: clips.length),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
               itemCount: clips.length + 1,
               itemBuilder: (context, index) {
                 if (index == clips.length) {
                   return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: OutlinedButton.icon(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: AddSegmentButton(
                       onPressed: onAddClip,
-                      icon: const Icon(Icons.add),
-                      label: const Text('增加片段'),
                     ),
                   );
                 }
@@ -1540,13 +1650,72 @@ class EditorControlsPane extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.ios_share),
-              label: const Text('导出'),
+              label: Text('导出 ${clips.length} 段'),
               style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
+                minimumSize: const Size.fromHeight(50),
+                backgroundColor: EditorPalette.teal,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xffb7c8c5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class SegmentCountPill extends StatelessWidget {
+  const SegmentCountPill({required this.count, super.key});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: EditorPalette.tealSoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Text(
+          '$count',
+          style: const TextStyle(
+            color: EditorPalette.teal,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AddSegmentButton extends StatelessWidget {
+  const AddSegmentButton({required this.onPressed, super.key});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.add),
+      label: const Text('增加片段'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(44),
+        foregroundColor: EditorPalette.teal,
+        side: const BorderSide(color: EditorPalette.line),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -1585,67 +1754,172 @@ class PlaybackControlBlock extends StatelessWidget {
     final maxMs = math.max(duration.inMilliseconds, 1);
     final value = position.inMilliseconds.clamp(0, maxMs).toDouble();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
       child: Column(
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Text(shortTimestamp(position), style: tabularText(context)),
-              Expanded(
-                child: Slider(
-                  min: 0,
-                  max: maxMs.toDouble(),
-                  value: value,
-                  onChangeStart: onScrubStart,
-                  onChanged: onScrubChanged,
-                  onChangeEnd: onScrubEnd,
-                ),
-              ),
-              Text(shortTimestamp(duration), style: tabularText(context)),
-            ],
-          ),
-          Row(
-            children: <Widget>[
-              HoldStepButton(
-                tooltip: '后退',
-                icon: Icons.skip_previous,
-                onStep: onNudgeBack,
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                tooltip: isPlaying ? '暂停' : '播放',
-                onPressed: onTogglePlayback,
-                icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-              ),
-              const SizedBox(width: 8),
-              HoldStepButton(
-                tooltip: '前进',
-                icon: Icons.skip_next,
-                onStep: onNudgeForward,
-              ),
-              const Spacer(),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<StepScale>(
-                  value: stepScale,
-                  borderRadius: BorderRadius.circular(8),
-                  items: StepScale.values
-                      .map(
-                        (scale) => DropdownMenuItem<StepScale>(
-                          value: scale,
-                          child: Text(scale.label),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: EditorPalette.panelRaised,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: EditorPalette.line),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      TimeReadout(
+                        value: shortTimestamp(position),
+                        active: true,
+                      ),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 6,
+                            activeTrackColor: EditorPalette.teal,
+                            inactiveTrackColor: EditorPalette.panelMuted,
+                            thumbColor: EditorPalette.text,
+                            overlayColor: const Color(0x220f766e),
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 8,
+                            ),
+                            overlayShape: const RoundSliderOverlayShape(
+                              overlayRadius: 18,
+                            ),
+                          ),
+                          child: Slider(
+                            min: 0,
+                            max: maxMs.toDouble(),
+                            value: value,
+                            onChangeStart: onScrubStart,
+                            onChanged: onScrubChanged,
+                            onChangeEnd: onScrubEnd,
+                          ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (scale) {
-                    if (scale != null) {
-                      onStepScaleChanged(scale);
-                    }
-                  },
-                ),
+                      ),
+                      TimeReadout(value: shortTimestamp(duration)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      HoldStepButton(
+                        tooltip: '后退',
+                        icon: Icons.skip_previous,
+                        onStep: onNudgeBack,
+                      ),
+                      const SizedBox(width: 10),
+                      IconButton(
+                        tooltip: isPlaying ? '暂停' : '播放',
+                        onPressed: onTogglePlayback,
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 160),
+                          child: Icon(
+                            isPlaying ? Icons.pause : Icons.play_arrow,
+                            key: ValueKey<bool>(isPlaying),
+                          ),
+                        ),
+                        color: Colors.white,
+                        style: IconButton.styleFrom(
+                          backgroundColor: EditorPalette.text,
+                          fixedSize: const Size(52, 52),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      HoldStepButton(
+                        tooltip: '前进',
+                        icon: Icons.skip_next,
+                        onStep: onNudgeForward,
+                      ),
+                      const Spacer(),
+                      StepScalePicker(
+                        value: stepScale,
+                        onChanged: onStepScaleChanged,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class TimeReadout extends StatelessWidget {
+  const TimeReadout({
+    required this.value,
+    this.active = false,
+    super.key,
+  });
+
+  final String value;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      child: Text(
+        value,
+        textAlign: active ? TextAlign.left : TextAlign.right,
+        style: tabularText(context).copyWith(
+          color: active ? EditorPalette.text : EditorPalette.mutedText,
+          fontSize: 13,
+          fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class StepScalePicker extends StatelessWidget {
+  const StepScalePicker({
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
+
+  final StepScale value;
+  final ValueChanged<StepScale> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: EditorPalette.panelMuted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<StepScale>(
+            value: value,
+            borderRadius: BorderRadius.circular(8),
+            icon: const Icon(Icons.expand_more, size: 20),
+            style: const TextStyle(
+              color: EditorPalette.text,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+            items: StepScale.values
+                .map(
+                  (scale) => DropdownMenuItem<StepScale>(
+                    value: scale,
+                    child: Text(scale.label),
+                  ),
+                )
+                .toList(),
+            onChanged: (scale) {
+              if (scale != null) {
+                onChanged(scale);
+              }
+            },
+          ),
+        ),
       ),
     );
   }
@@ -1712,12 +1986,12 @@ class _HoldStepButtonState extends State<HoldStepButton> {
         onLongPressEnd: (_) => _stopHold(),
         onLongPressCancel: _stopHold,
         child: Material(
-          color: Theme.of(context).colorScheme.secondaryContainer,
+          color: EditorPalette.panelMuted,
           shape: const CircleBorder(),
           child: SizedBox(
             width: 48,
             height: 48,
-            child: Icon(widget.icon),
+            child: Icon(widget.icon, color: EditorPalette.text),
           ),
         ),
       ),
@@ -1747,49 +2021,94 @@ class ClipCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: <Widget>[
-            SizedBox(
-              width: 30,
-              child: Text(
-                '${index + 1}',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-            const SizedBox(width: 6),
-            TimeSetButton(label: shortTimestamp(clip.start), onPressed: onSetStart),
-            const SizedBox(width: 8),
-            TimeSetButton(label: shortTimestamp(clip.end), onPressed: onSetEnd),
-            const SizedBox(width: 8),
-            Expanded(
-              child: GestureDetector(
-                onLongPressStart: (_) => unawaited(onPreviewStart()),
-                onLongPressEnd: (_) => unawaited(onPreviewEnd()),
-                onLongPressCancel: () => unawaited(onPreviewEnd()),
-                child: SizedBox(
-                  height: 44,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xffeef4f7),
-                      borderRadius: BorderRadius.circular(6),
+    final invalid = clip.start > clip.end;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: EditorPalette.panelRaised,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: invalid ? EditorPalette.danger : EditorPalette.line,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: 30,
+                height: 46,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: invalid
+                        ? const Color(0xffffe4e0)
+                        : EditorPalette.tealSoft,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: invalid
+                            ? EditorPalette.danger
+                            : EditorPalette.teal,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    child: const Center(child: Icon(Icons.playlist_play, size: 20)),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: '删除',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
+              const SizedBox(width: 8),
+              TimeSetButton(
+                title: '开始',
+                label: shortTimestamp(clip.start),
+                onPressed: onSetStart,
+              ),
+              const SizedBox(width: 7),
+              TimeSetButton(
+                title: '结束',
+                label: shortTimestamp(clip.end),
+                onPressed: onSetEnd,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onLongPressStart: (_) => unawaited(onPreviewStart()),
+                  onLongPressEnd: (_) => unawaited(onPreviewEnd()),
+                  onLongPressCancel: () => unawaited(onPreviewEnd()),
+                  child: SizedBox(
+                    height: 46,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: EditorPalette.panelMuted,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.play_circle_outline,
+                          color: EditorPalette.mutedText,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '删除',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+                color: EditorPalette.danger,
+                style: IconButton.styleFrom(
+                  fixedSize: const Size(42, 42),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1798,11 +2117,13 @@ class ClipCard extends StatelessWidget {
 
 class TimeSetButton extends StatelessWidget {
   const TimeSetButton({
+    required this.title,
     required this.label,
     required this.onPressed,
     super.key,
   });
 
+  final String title;
   final String label;
   final VoidCallback onPressed;
 
@@ -1811,10 +2132,34 @@ class TimeSetButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(68, 44),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(68, 46),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        foregroundColor: EditorPalette.text,
+        side: const BorderSide(color: EditorPalette.line),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
       ),
-      child: Text(label, style: tabularText(context)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            title,
+            style: const TextStyle(
+              color: EditorPalette.mutedText,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            label,
+            style: tabularText(context).copyWith(
+              color: EditorPalette.text,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
