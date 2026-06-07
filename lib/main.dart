@@ -8,10 +8,10 @@ import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -858,6 +858,228 @@ class ExportException implements Exception {
   String toString() => message;
 }
 
+class NativeVideoController extends ChangeNotifier {
+  NativeVideoController(this.path);
+
+  static const String viewType = 'livocut/native_video_player';
+
+  final String path;
+  MethodChannel? _channel;
+  Timer? _pollTimer;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+  bool _isPlaying = false;
+  bool _isReady = false;
+  bool _disposed = false;
+  bool _scrubDispatching = false;
+  int _scrubGeneration = 0;
+  int _lastScrubSentUs = 0;
+  Duration? _pendingScrubTarget;
+
+  Duration get duration => _duration;
+  Duration get position => _position;
+  bool get isPlaying => _isPlaying;
+  bool get isReady => _isReady;
+
+  Future<void> attach(int viewId) async {
+    if (_disposed) {
+      return;
+    }
+    _channel = MethodChannel('livocut/native_video_player_$viewId');
+    await refresh();
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      unawaited(refresh());
+    });
+  }
+
+  Future<void> refresh() async {
+    final state = await _invoke<Map<dynamic, dynamic>>('getState');
+    if (state == null || _disposed) {
+      return;
+    }
+    _applyState(state);
+  }
+
+  Future<void> play() async {
+    final state = await _invoke<Map<dynamic, dynamic>>('play');
+    if (state != null) {
+      _applyState(state);
+      return;
+    }
+    _isPlaying = true;
+    notifyListeners();
+  }
+
+  Future<void> pause() async {
+    final state = await _invoke<Map<dynamic, dynamic>>('pause');
+    if (state != null) {
+      _applyState(state);
+      return;
+    }
+    _isPlaying = false;
+    notifyListeners();
+  }
+
+  Future<void> seekTo(Duration target) async {
+    final clamped = _clampToDuration(target);
+    _position = clamped;
+    notifyListeners();
+    final state = await _invoke<Map<dynamic, dynamic>>(
+      'seekTo',
+      <String, Object>{'position': clamped.inMilliseconds},
+    );
+    if (state != null) {
+      _applyState(state);
+    }
+  }
+
+  Future<void> beginScrub() async {
+    _scrubGeneration++;
+    _pendingScrubTarget = null;
+    final state = await _invoke<Map<dynamic, dynamic>>('beginScrub');
+    if (state != null) {
+      _applyState(state);
+      return;
+    }
+    _isPlaying = false;
+    notifyListeners();
+  }
+
+  Future<void> scrubTo(Duration target) {
+    final clamped = _clampToDuration(target);
+    _position = clamped;
+    _pendingScrubTarget = clamped;
+    notifyListeners();
+    if (!_scrubDispatching) {
+      unawaited(_dispatchScrub(_scrubGeneration));
+    }
+    return Future<void>.value();
+  }
+
+  Future<void> endScrub(Duration target, bool shouldPlay) async {
+    _scrubGeneration++;
+    _pendingScrubTarget = null;
+    final clamped = _clampToDuration(target);
+    _position = clamped;
+    notifyListeners();
+    final state = await _invoke<Map<dynamic, dynamic>>(
+      'endScrub',
+      <String, Object>{
+        'position': clamped.inMilliseconds,
+        'play': shouldPlay,
+      },
+    );
+    if (state != null) {
+      _applyState(state);
+      return;
+    }
+    _isPlaying = shouldPlay;
+    notifyListeners();
+  }
+
+  Future<void> _dispatchScrub(int generation) async {
+    _scrubDispatching = true;
+    try {
+      while (!_disposed &&
+          generation == _scrubGeneration &&
+          _pendingScrubTarget != null) {
+        final target = _pendingScrubTarget!;
+        _pendingScrubTarget = null;
+        final nowUs = DateTime.now().microsecondsSinceEpoch;
+        final waitUs = 16000 - (nowUs - _lastScrubSentUs);
+        if (waitUs > 0) {
+          await Future<void>.delayed(Duration(microseconds: waitUs));
+        }
+        if (_disposed || generation != _scrubGeneration) {
+          break;
+        }
+        await _invoke<Map<dynamic, dynamic>>(
+          'scrubTo',
+          <String, Object>{'position': target.inMilliseconds},
+        );
+        _lastScrubSentUs = DateTime.now().microsecondsSinceEpoch;
+      }
+    } finally {
+      _scrubDispatching = false;
+      if (!_disposed &&
+          generation == _scrubGeneration &&
+          _pendingScrubTarget != null) {
+        unawaited(_dispatchScrub(generation));
+      }
+    }
+  }
+
+  Duration _clampToDuration(Duration target) {
+    return clampDuration(target, Duration.zero, _duration);
+  }
+
+  void _applyState(Map<dynamic, dynamic> state) {
+    _duration = Duration(milliseconds: (state['duration'] as num? ?? 0).round());
+    _position = Duration(milliseconds: (state['position'] as num? ?? 0).round());
+    _isPlaying = state['isPlaying'] as bool? ?? false;
+    _isReady = state['isReady'] as bool? ?? false;
+    notifyListeners();
+  }
+
+  Future<T?> _invoke<T>(String method, [Object? arguments]) async {
+    final channel = _channel;
+    if (channel == null || _disposed) {
+      return null;
+    }
+    try {
+      return channel.invokeMethod<T>(method, arguments);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  void dispose() {
+    final channel = _channel;
+    _disposed = true;
+    _pollTimer?.cancel();
+    _pendingScrubTarget = null;
+    if (channel != null) {
+      unawaited(channel.invokeMethod<void>('release'));
+    }
+    super.dispose();
+  }
+}
+
+class NativeVideoPlayer extends StatelessWidget {
+  const NativeVideoPlayer({
+    required this.controller,
+    super.key,
+  });
+
+  final NativeVideoController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Platform.isAndroid) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: Text(
+            '当前播放器仅支持 Android',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+
+    return AndroidView(
+      viewType: NativeVideoController.viewType,
+      creationParams: <String, Object>{'path': controller.path},
+      creationParamsCodec: const StandardMessageCodec(),
+      onPlatformViewCreated: (viewId) {
+        unawaited(controller.attach(viewId));
+      },
+    );
+  }
+}
+
 class EditorScreen extends StatefulWidget {
   const EditorScreen({
     required this.videoPath,
@@ -875,7 +1097,7 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   final ExportService _exportService = ExportService();
   final VideoProbeService _probeService = VideoProbeService();
-  late final VideoPlayerController _controller;
+  late final NativeVideoController _controller;
   final List<ClipRange> _clips = <ClipRange>[ClipRange()];
   StepScale _stepScale = StepScale.frame;
   Duration _duration = Duration.zero;
@@ -901,17 +1123,14 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> _initialize() async {
-    _controller = VideoPlayerController.file(File(widget.videoPath));
+    _controller = NativeVideoController(widget.videoPath);
+    _controller.addListener(_syncFromPlayer);
     try {
-      final frameFuture = _probeService.frameDuration(widget.videoPath);
-      await _controller.initialize();
-      _controller.addListener(_syncFromPlayer);
-      _frameStep = await frameFuture;
+      _frameStep = await _probeService.frameDuration(widget.videoPath);
       if (!mounted) {
         return;
       }
       setState(() {
-        _duration = _controller.value.duration;
         _position = Duration.zero;
         _initializing = false;
       });
@@ -927,14 +1146,15 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void _syncFromPlayer() {
-    final value = _controller.value;
-    if (!mounted || _scrubbing) {
+    if (!mounted) {
       return;
     }
     setState(() {
-      _duration = value.duration;
-      _position = value.position;
-      _isPlaying = value.isPlaying;
+      _duration = _controller.duration;
+      if (!_scrubbing) {
+        _position = _controller.position;
+      }
+      _isPlaying = _controller.isPlaying;
     });
   }
 
@@ -975,39 +1195,37 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> _startScrub(double _) async {
-    _wasPlayingBeforeScrub = _controller.value.isPlaying;
+    _wasPlayingBeforeScrub = _controller.isPlaying;
     _scrubbing = true;
-    await _controller.pause();
+    await _controller.beginScrub();
   }
 
   void _changeScrub(double value) {
     final target = Duration(milliseconds: value.round());
     setState(() => _position = target);
-    unawaited(_queueSeek(target));
+    unawaited(_controller.scrubTo(target));
   }
 
   Future<void> _endScrub(double value) async {
     final target = Duration(milliseconds: value.round());
-    await _queueSeek(target);
+    await _controller.endScrub(target, _wasPlayingBeforeScrub);
     _scrubbing = false;
-    if (_wasPlayingBeforeScrub) {
-      await _controller.play();
-    } else {
-      await _controller.pause();
-    }
     if (mounted) {
-      setState(() => _isPlaying = _controller.value.isPlaying);
+      setState(() {
+        _position = target;
+        _isPlaying = _controller.isPlaying;
+      });
     }
   }
 
   Future<void> _togglePlayback() async {
-    if (_controller.value.isPlaying) {
+    if (_controller.isPlaying) {
       await _controller.pause();
     } else {
       await _controller.play();
     }
     if (mounted) {
-      setState(() => _isPlaying = _controller.value.isPlaying);
+      setState(() => _isPlaying = _controller.isPlaying);
     }
   }
 
@@ -1038,7 +1256,7 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     _previewing = true;
     _restorePosition = _displayPosition;
-    _restoreWasPlaying = _controller.value.isPlaying;
+    _restoreWasPlaying = _controller.isPlaying;
     await _controller.pause();
     await _queueSeek(clip.start);
     await _controller.play();
@@ -1047,7 +1265,7 @@ class _EditorScreenState extends State<EditorScreen> {
         return;
       }
       final end = clip.end > clip.start ? clip.end : clip.start + const Duration(seconds: 1);
-      if (_controller.value.position >= end) {
+      if (_controller.position >= end) {
         await _controller.seekTo(clip.start);
         await _controller.play();
       }
@@ -1069,7 +1287,7 @@ class _EditorScreenState extends State<EditorScreen> {
       await _controller.play();
     }
     if (mounted) {
-      setState(() => _isPlaying = _controller.value.isPlaying);
+      setState(() => _isPlaying = _controller.isPlaying);
     }
   }
 
@@ -1172,7 +1390,7 @@ class VideoPane extends StatelessWidget {
     super.key,
   });
 
-  final VideoPlayerController controller;
+  final NativeVideoController controller;
   final String title;
   final VoidCallback onBack;
 
@@ -1181,12 +1399,7 @@ class VideoPane extends StatelessWidget {
     return Stack(
       children: <Widget>[
         Positioned.fill(
-          child: Center(
-            child: AspectRatio(
-              aspectRatio: controller.value.aspectRatio == 0 ? 16 / 9 : controller.value.aspectRatio,
-              child: VideoPlayer(controller),
-            ),
-          ),
+          child: NativeVideoPlayer(controller: controller),
         ),
         Positioned(
           left: 8,
