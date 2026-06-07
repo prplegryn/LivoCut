@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature;
 
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
@@ -137,7 +136,7 @@ class _RootGateState extends State<RootGate> {
 
 PageRoute<T> slideRoute<T>(Widget child) {
   return PageRouteBuilder<T>(
-    pageBuilder: (_, __, ___) => child,
+    pageBuilder: (_, _, _) => child,
     transitionDuration: const Duration(milliseconds: 220),
     reverseTransitionDuration: const Duration(milliseconds: 180),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -555,7 +554,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     return ListView.separated(
                       padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
                       itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final entry = entries[index];
                         return LibraryEntryTile(
@@ -698,7 +697,7 @@ class PermissionErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(Icons.lock_folder, size: 36),
+            const Icon(Icons.lock_outline, size: 36),
             const SizedBox(height: 12),
             Text(
               '无法读取当前目录',
